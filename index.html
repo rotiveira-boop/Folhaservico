@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mod. 06/20 - Folha de Serviço Mensal - T.E.C., LDA</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="Favicon.png">
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        html, body {
+            overflow-x: hidden;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
+        body {
+            background-color: #f1f3f6;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        body.ver-folha-ativa {
+            justify-content: flex-start !important;
+            padding-top: 5px !important;
+        }
+
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        .maiusculas {
+            text-transform: uppercase;
+        }
+
+        .main-table td { font-family: Arial, Helvetica, sans-serif !important; font-size: 11px !important; color: #1d4ed8 !important; position: relative; }
+
+        /* LINHA DUPLA HORIZONTAL PARA TRANCAR O MÊS A MEIO DAS CÉLULAS */
+        .linha-tranca-container {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .linha-tranca-container hr {
+            border: none;
+            border-top: 1.5px solid #000000;
+            margin: 0;
+            width: 100%;
+        }
+
+        /* PAINEL DE INSERÇÃO COM TRAMA VERDE CLARO */
+        .interactive-panel {
+            background: #f0fdf4;
+            border: 2px solid #15803d;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            box-sizing: border-box;
+            margin: auto;
+        }
+
+        .panel-header {
+            background: #166534;
+            color: #ffffff;
+            padding: 10px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .mod-badge {
+            background-color: #14532d;
+            color: #ffffff;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 12px;
+            width: 100%;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .form-group.full-width {
+            grid-column: span 2;
+        }
+
+        .form-group label {
+            font-size: 13px;
+            font-weight: bold;
+            color: #166534;
+            margin-bottom: 3px;
+        }
+
+        .form-group input {
+            padding: 6px 8px;
+            border: 1px solid #166534;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            outline: none;
+            background-color: #ffffff !important; 
+            height: 38px;
+            color: #1d4ed8 !important; 
+            width: 100%;
+            box-sizing: border-box;
+            text-transform: uppercase;
+        }
+
+        .form-group input:focus {
+            border-color: #15803d;
+            background-color: #ffffff !important;
+            box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.15);
+        }
+        
+        .botoes-acao {
+            grid-column: span 2;
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .btn {
+            border: none;
+            padding: 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 38px;
+            flex: 1;
+        }
+
+        .btn-inserir { background-color: #166534; color: #ffffff; }
+        .btn-inserir:hover { background-color: #14532d; }
+        .btn-toggle-a4 { background-color: #0284c7; color: white; }
+        .btn-toggle-a4:hover { background-color: #0369a1; }
+
+        /* MODAL DE CONFIRMAÇÃO */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.5);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+        }
+
+        .modal-box {
+            background: #ffffff;
+            padding: 16px;
+            border-radius: 6px;
+            border: 2px solid #166534;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            text-align: center;
+            max-width: 340px;
+            width: 100%;
+        }
+
+        .modal-box p { font-size: 14px; font-weight: bold; color: #166534; margin-top: 0; margin-bottom: 12px; }
+        .modal-buttons { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
+        .modal-btn { padding: 8px 12px; font-weight: bold; border-radius: 4px; cursor: pointer; border: none; font-size: 13px; flex: 1; }
+        .modal-btn-sim { background-color: #166534; color: #ffffff; }
+        .modal-btn-nao { background-color: #fef2f2; color: #991b1b; border: 1.32px solid #fecaca; }
+
+        /* CÉLULAS EDITÁVEIS NA TABELA A4 */
+        .main-table td[contenteditable="true"] {
+            cursor: text;
+            background-color: #ffffff;
+        }
+        .main-table td[contenteditable="true"]:focus {
+            outline: 2px solid #166534;
+            background-color: #ffffff;
+        }
+
+        /* ESTRUTURA DA FOLHA A4 */
+        .page-container {
+            display: none;
+            width: 100%;
+            max-width: 297mm;
+            overflow-x: auto;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        body.ver-folha-ativa .interactive-panel { display: none !important; }
+        body.ver-folha-ativa .page-container { display: flex !important; }
+
+        .page {
+            background: white;
+            width: 297mm;
+            height: 210mm;
+            padding: 2mm 6mm 4mm 6mm; 
+            box-shadow: 0 0 12px rgba(0,0,0,0.1);
+            border: 1.32px solid #cbd5e1;
+            position: relative;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .a4-top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 3px;
+            gap: 6px;
+            position: relative;
+        }
+
+        .a4-buttons-group {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-grow: 1;
+        }
+
+        .btn-a4 {
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 11px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 24px;
+            padding: 0 10px;
+            white-space: nowrap;
+        }
+
+        .btn-a4-nav { background-color: #f1f5f9; color: #0f172a; border: 1.32px solid #cbd5e1; font-weight: 900; }
+        .btn-a4-nav:hover { background-color: #e2e8f0; }
+        .btn-a4-apagar { background-color: #fef2f2; color: #991b1b; border: 1.32px solid #fecaca; }
+        .btn-a4-sync { background-color: #f0f9ff; color: #0369a1; border: 1.32px solid #bae6fd; }
+        .btn-a4-sync:hover { background-color: #e0f2fe; }
+        .btn-a4-verde { background-color: #f0fdf4; color: #166534; border: 1.32px solid #bbf7d0; }
+        .btn-a4-fechar { background-color: #fef9c3; color: #854d0e; border: 1.32px solid #fef08a; }
+        .btn-sair-a4 { background-color: #ef4444; color: white; border: none; border-radius: 4px; padding: 0 8px; font-size: 11px; font-weight: bold; cursor: pointer; height: 24px; position: absolute; right: 0; }
+
+        .sheet-wrapper {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            background-color: #fff;
+        }
+
+        /* CABEÇALHO SUPERIOR */
+        .header-grid-container {
+            display: flex;
+            width: 100%;
+            height: 52px;
+            border-left: 1.32px solid #000000;
+            border-right: none;
+            border-top: none;
+            border-bottom: none;
+            margin-bottom: 4px;
+            background-color: #fff;
+            box-sizing: border-box;
+        }
+
+        .h-bloco {
+            display: flex;
+            flex-direction: column;
+            border-top: 1.32px solid #000000;
+            border-bottom: 1.32px solid #000000;
+            border-right: 1.32px solid #000000;
+            box-sizing: border-box;
+            height: 100%;
+            background: #fff;
+        }
+
+        .h-linha {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1; 
+            padding: 0 4px;
+            font-size: 9px;
+            font-weight: bold;
+            text-align: center;
+            overflow: hidden;
+            box-sizing: border-box;
+            background-color: #fff;
+            border-right: 1.32px solid #000000;
+        }
+
+        .h-linha:last-child {
+            border-right: none;
+        }
+
+        .h-linha-superior {
+            border-bottom: 1.32px solid #000000;
+        }
+
+        .trama-cinza {
+            background-color: #e2e8f0 !important;
+        }
+
+        .h-input-celula {
+            border: none;
+            background: transparent;
+            font-weight: bold;
+            font-size: 11.7px;
+            outline: none;
+            text-align: center;
+            color: #1d4ed8;
+            width: 100%;
+        }
+
+        .h-espaco-perc {
+            border-top: 1.32px solid #000000;
+            border-right: 1.32px solid #000000;
+            border-bottom: 1.32px solid #ffffff !important;
+            background: #fff;
+            height: 100%;
+            box-sizing: border-box;
+        }
+
+        .header-logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            background: #fff;
+            height: 100%;
+            box-sizing: border-box;
+            border-top: none !important;
+            border-bottom: none !important;
+            border-right: none !important;
+            border-left: 1.32px solid #000000;
+            overflow: hidden;
+        }
+
+        .header-logo-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+        }
+
+        /* MASTER-BOX */
+        .master-box {
+            border: 2px solid #000000;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            background-color: #fff;
+            position: relative;
+        }
+
+        /* TABELA A4 FIXA COM 25 LINHAS */
+        .main-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            table-layout: fixed; 
+            empty-cells: show; 
+            flex-grow: 1;
+        }
+
+        .main-table tr { 
+            height: 23.65px; 
+        }
+
+        .main-table th, .main-table td { 
+            border: 1.32px solid #000000 !important; 
+            padding: 1px 2px; 
+            overflow: hidden; 
+            height: 23.65px; 
+            vertical-align: middle !important; 
+        }
+
+        .main-table th { 
+            background-color: #f1f5f9; 
+            font-weight: bold; 
+            color: #000000; 
+            font-size: 9.5px; 
+            text-align: left !important; 
+            white-space: nowrap; 
+            border: 1.32px solid #000000 !important;
+        }
+
+        .main-table thead tr th {
+            border-bottom: 2px solid #000000 !important;
+        }
+
+        .th-perc {
+            border-top: 1.32px solid #ffffff !important;
+        }
+
+        .main-table td { 
+            white-space: nowrap; 
+            text-overflow: ellipsis; 
+            color: #1d4ed8; 
+            text-align: center; 
+            border: 1.32px solid #000000 !important;
+        }
+
+        /* AVISO DE CONTINUAÇÃO (RODAPÉ DA TABELA / PÁGINA) */
+        .aviso-continua {
+            position: absolute;
+            bottom: 4px;
+            right: 8px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #000000;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* CARIMBO DO RESUMO ALINHADO À ESQUERDA COM TÍTULO */
+        .resumo-carimbo {
+            position: absolute;
+            bottom: 12mm;
+            right: 15mm;
+            background: #ffffff;
+            border: 2px solid #000000;
+            border-radius: 6px;
+            padding: 8px 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 20;
+            text-align: left;
+        }
+
+        .resumo-titulo {
+            font-size: 12px;
+            font-weight: bold;
+            color: #000000;
+            text-transform: uppercase;
+            border-bottom: 1.32px solid #000000;
+            padding-bottom: 3px;
+            margin-bottom: 6px;
+            width: 100%;
+            letter-spacing: 0.5px;
+        }
+
+        .resumo-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: flex-start;
+        }
+
+        .resumo-item {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            font-weight: normal;
+            font-size: 12px;
+            color: #1f2937;
+        }
+
+        .resumo-item span {
+            display: block;
+            font-size: 15px;
+            color: #000000;
+            font-weight: bold;
+            margin-bottom: 1px;
+        }
+
+        @page { size: A4 landscape; margin: 0; }
+        @media print {
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            html, body { width: 297mm; height: 210mm; background: white; margin: 0 !important; padding: 0 !important; }
+            .interactive-panel, .modal-overlay, .a4-top-bar { display: none !important; }
+            .page-container { display: flex !important; width: 297mm !important; height: 210mm !important; overflow: visible !important; gap: 0 !important; }
+            .page { box-shadow: none !important; border: none !important; width: 297mm !important; height: 210mm !important; margin: 0 !important; padding-top: 5mm !important; page-break-after: always; break-after: page; }
+            .main-table th, .main-table td { border: 1.32px solid #000000 !important; vertical-align: middle !important; }
+            .main-table thead tr th { border-bottom: 2px solid #000000 !important; }
+            .h-espaco-perc { border-top: 1.32px solid #000000; border-bottom: 1.32px solid #ffffff !important; }
+            .th-perc { border-top: 1.32px solid #ffffff !important; }
+            .trama-cinza { background-color: #e2e8f0 !important; }
+            .main-table th { text-align: left !important; border: 1.32px solid #000000 !important; }
+            .main-table td[contenteditable="true"] { background-color: transparent !important; }
+            .aviso-continua { position: absolute !important; bottom: 4px !important; right: 8px !important; }
+            .resumo-carimbo { border: 2px solid #000000 !important; background: #ffffff !important; color: #000 !important; box-shadow: none !important; position: absolute !important; bottom: 12mm !important; right: 15mm !important; text-align: left !important; }
+        }
+    </style>
+</head>
+<body class="fonte-padrao" onload="definirDataAtual()">
+
+    <!-- MODAL DE CONFIRMAÇÃO GERAL -->
+    <div id="modalLimpar" class="modal-overlay">
+        <div class="modal-box">
+            <p>Tem a certeza que deseja limpar toda a folha?</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-sim" onclick="respostaLimpar(true)">Sim</button>
+                <button class="modal-btn modal-btn-nao" onclick="respostaLimpar(false)">Não</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAINEL DE INSERÇÃO COM FUNDO VERDE CLARO -->
+    <div class="interactive-panel">
+        <div class="panel-header">
+            <h3>Registo de Serviço de Transporte</h3>
+            <span class="mod-badge">Mod. 06/20</span>
+        </div>
+        <form id="menuForm" novalidate onsubmit="return false;">
+            <div class="form-grid">
+                
+                <div class="form-group">
+                    <label>Motorista / Assinatura:</label>
+                    <input type="text" id="in_motorista" class="maiusculas" oninput="sincronizarCabecalhoDeInput('motorista')">
+                </div>
+                <div class="form-group">
+                    <label>Matrícula:</label>
+                    <input type="text" id="in_matricula" class="maiusculas" maxlength="8" oninput="sincronizarCabecalhoDeInput('matricula')">
+                </div>
+
+                <div class="form-group">
+                    <label>Data Início:</label>
+                    <input type="text" id="in_data_inicio" onfocus="focarData(this)" onblur="desfocarData(this)">
+                </div>
+                <div class="form-group">
+                    <label>Data Fim:</label>
+                    <input type="text" id="in_data_fim" onfocus="focarData(this)" onblur="desfocarData(this)">
+                </div>
+                
+                <div class="form-group">
+                    <label>Kms Início:</label>
+                    <input type="number" id="in_kms_inicio" oninput="validarNumeroPositivo(this)">
+                </div>
+                <div class="form-group">
+                    <label>Kms Paragem:</label>
+                    <input type="number" id="in_kms_paragem" oninput="validarNumeroPositivo(this)">
+                </div>
+
+                <div class="form-group full-width">
+                    <label>Origem:</label>
+                    <input type="text" id="in_origem" autocomplete="on" list="lista_locais" class="maiusculas">
+                </div>
+                
+                <div class="form-group full-width">
+                    <label>Destino:</label>
+                    <input type="text" id="in_destino" autocomplete="on" list="lista_locais" class="maiusculas">
+                    <datalist id="lista_locais"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>Reboque:</label>
+                    <input type="text" id="in_reboque" class="maiusculas" autocomplete="on" list="lista_reboques">
+                    <datalist id="lista_reboques"></datalist>
+                </div>
+                
+                <div class="form-group">
+                    <label>Peso:</label>
+                    <input type="text" id="in_peso" onfocus="limparPeso(this)" onblur="formatarPeso(this)">
+                </div>
+
+                <div class="form-group">
+                    <label>CMR:</label>
+                    <input type="text" id="in_cmr" class="maiusculas">
+                </div>
+
+                <div class="form-group">
+                    <label>ADR:</label>
+                    <input type="text" id="in_adr" class="maiusculas">
+                </div>
+
+                <div class="form-group full-width">
+                    <label>Observações:</label>
+                    <input type="text" id="in_obs">
+                </div>
+
+                <div class="botoes-acao">
+                    <button type="button" class="btn btn-inserir" onclick="validarEProcessarRegisto()">INSERIR</button>
+                    <button type="button" class="btn btn-toggle-a4" onclick="alternarVerFolha(true)">📄 Ver PDF</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- CONTENTOR DE PÁGINAS A4 -->
+    <div class="page-container" id="pageContainer"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "SUA_API_KEY",
+            authDomain: "SEU_PROJETO.firebaseapp.com",
+            databaseURL: "https://SEU_PROJETO-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "SEU_PROJETO",
+            storageBucket: "SEU_PROJETO.appspot.com",
+            messagingSenderId: "SUA_MESSAGING_ID",
+            appId: "SUA_APP_ID"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const dbRef = db.ref('folha_servico_mensal/dados_atuais'); 
+
+        const LINHAS_POR_PAGINA = 25;
+        let dadosPreenchidos = [];
+        let historicoDesfazer = [];
+        let mesFechado = false;
+        let despesasExtras = "";
+        let atualizandoRemotamente = false;
+
+        function validarNumeroPositivo(input) {
+            if (input.value < 0) {
+                input.value = '';
+            }
+            input.value = input.value.replace(/[^0-9]/g, '');
+        }
+
+        function obterDataHojeISO() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function focarData(el) {
+            el.type = 'date';
+            if (el.dataset.dataReal) {
+                el.value = el.dataset.dataReal;
+            } else {
+                el.value = obterDataHojeISO();
+            }
+        }
+
+        function desfocarData(el) {
+            if (!el.value) el.value = obterDataHojeISO();
+            el.dataset.dataReal = el.value;
+            
+            if (el.value === obterDataHojeISO()) {
+                el.type = 'text';
+                el.value = 'Hoje';
+            } else {
+                el.type = 'date';
+            }
+        }
+
+        function definirDataAtual() {
+            const di = document.getElementById('in_data_inicio');
+            const df = document.getElementById('in_data_fim');
+            
+            if (di) {
+                di.dataset.dataReal = obterDataHojeISO();
+                di.type = 'text';
+                di.value = 'Hoje';
+            }
+            if (df) {
+                df.dataset.dataReal = obterDataHojeISO();
+                df.type = 'text';
+                df.value = 'Hoje';
+            }
+
+            renderizarTodasAsPaginas();
+        }
+
+        function limparPeso(el) {
+            el.value = el.value.replace(/ Kg$/i, '').trim();
+        }
+
+        function formatarPeso(el) {
+            let val = el.value.replace(/[^0-9.,]/g, '').trim();
+            if (val) {
+                el.value = val + ' Kg';
+            } else {
+                el.value = '';
+            }
+        }
+
+        function alternarVerFolha(mostrar) {
+            if (mostrar) {
+                renderizarTodasAsPaginas();
+                document.body.classList.add('ver-folha-ativa');
+            } else {
+                document.body.classList.remove('ver-folha-ativa');
+            }
+        }
+
+        function formatarDataCurta(dataYYYYMMDD) {
+            if(!dataYYYYMMDD) return "";
+            const partes = dataYYYYMMDD.split('-');
+            if(partes.length === 3) return `${partes[2]}/${partes[1]}`;
+            return dataYYYYMMDD;
+        }
+
+        function obterNomeMesAtual() {
+            const meses = [
+                "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+                "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
+            ];
+            const mesIndex = new Date().getMonth();
+            return meses[mesIndex];
+        }
+
+        function classificarDiaPelaData(dataStr) {
+            if (!dataStr) return 'normal';
+            let parts = dataStr.split('/');
+            if (parts.length !== 2) return 'normal';
+            
+            let dia = parseInt(parts[0], 10);
+            let mes = parseInt(parts[1], 10);
+            let ano = parseInt(document.getElementById('txt_ano_0') ? document.getElementById('txt_ano_0').value : new Date().getFullYear(), 10);
+            
+            let dateObj = new Date(ano, mes - 1, dia);
+            if (isNaN(dateObj.getTime())) return 'normal';
+
+            const feriadosFixos = ["1-1", "25-4", "1-5", "10-6", "15-8", "5-10", "1-12", "8-12", "25-12"];
+            if (feriadosFixos.includes(`${dia}-${mes}`)) return 'feriado';
+
+            let feriadosMoveis = calcularFeriadosMoveis(ano);
+            let chaveData = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+            if (feriadosMoveis.includes(chaveData)) return 'feriado';
+
+            let diaSemana = dateObj.getDay(); 
+            if (diaSemana === 0) return 'domingo';
+            if (diaSemana === 6) return 'sabado';
+
+            return 'normal';
+        }
+
+        function calcularFeriadosMoveis(ano) {
+            let f = Math.floor,
+                G = ano % 19,
+                C = f(ano / 100),
+                H = (C - f(C / 4) - f((8 * C + 13) / 25) + 19 * G + 15) % 30,
+                I = H - f(H / 28) * (1 - f(H / 28) * f(29 / (H + 1)) * f((21 - G) / 11)),
+                J = (ano + f(ano / 4) + I + 2 - C + f(C / 4)) % 7,
+                L = I - J,
+                mesPascoa = 3 + f((L + 40) / 44),
+                diaPascoa = L + 28 - 31 * f(mesPascoa / 4);
+
+            let dataPascoa = new Date(ano, mesPascoa - 1, diaPascoa);
+            
+            let sextaSanta = new Date(dataPascoa);
+            sextaSanta.setDate(dataPascoa.getDate() - 2);
+
+            let corpoDeDeus = new Date(dataPascoa);
+            corpoDeDeus.setDate(dataPascoa.getDate() + 60);
+
+            let formatarISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+            return [formatarISO(sextaSanta), formatarISO(corpoDeDeus)];
+        }
+
+        function atualizarListasSugestoes() {
+            let locaisSet = new Set();
+            let reboquesSet = new Set();
+            let matriculasSet = new Set();
+
+            dadosPreenchidos.forEach(item => {
+                if(item.origem) locaisSet.add(item.origem);
+                if(item.destino) locaisSet.add(item.destino);
+                if(item.reboque) reboquesSet.add(item.reboque);
+            });
+
+            const matInput = document.getElementById('in_matricula');
+            if(matInput && matInput.value.trim()) matriculasSet.add(matInput.value.trim());
+
+            const dlLocais = document.getElementById('lista_locais');
+            if (dlLocais) {
+                dlLocais.innerHTML = '';
+                locaisSet.forEach(val => {
+                    let opt = document.createElement('option');
+                    opt.value = val;
+                    dlLocais.appendChild(opt);
+                });
+            }
+
+            const dlReboque = document.getElementById('lista_reboques');
+            if (dlReboque) {
+                dlReboque.innerHTML = '';
+                reboquesSet.forEach(val => {
+                    let opt = document.createElement('option');
+                    opt.value = val;
+                    dlReboque.appendChild(opt);
+                });
+            }
+
+            const dlMatriculas = document.getElementById('lista_matriculas');
+            if (dlMatriculas) {
+                dlMatriculas.innerHTML = '';
+                matriculasSet.forEach(val => {
+                    let opt = document.createElement('option');
+                    opt.value = val;
+                    dlMatriculas.appendChild(opt);
+                });
+            }
+        }
+
+        function sincronizarCabecalhoDeInput(tipo) {
+            if (tipo === 'motorista') {
+                let val = document.getElementById('in_motorista').value;
+                document.querySelectorAll('[id^="txt_assinatura_"]').forEach(i => i.value = val);
+            } else if (tipo === 'matricula') {
+                let val = document.getElementById('in_matricula').value;
+                document.querySelectorAll('[id^="txt_matricula_"]').forEach(i => i.value = val);
+            }
+            gravarDados();
+        }
+
+        function validarEProcessarRegisto() {
+            if (mesFechado) {
+                alert("O mês já se encontra fechado. Não é possível adicionar mais viagens.");
+                return;
+            }
+
+            const motorista = document.getElementById('in_motorista').value.trim();
+            const matricula = document.getElementById('in_matricula').value.trim();
+            const kmsInicio = document.getElementById('in_kms_inicio').value.trim();
+            const kmsParagem = document.getElementById('in_kms_paragem').value.trim();
+            const origem = document.getElementById('in_origem').value.trim();
+            const destino = document.getElementById('in_destino').value.trim();
+            const peso = document.getElementById('in_peso').value.trim();
+            const cmr = document.getElementById('in_cmr').value.trim();
+
+            if (!motorista) {
+                alert("⚠️ Por favor, preencha o Motorista / Assinatura!");
+                document.getElementById('in_motorista').focus();
+                return;
+            }
+
+            if (!matricula) {
+                alert("⚠️ Por favor, preencha a Matrícula do veículo!");
+                document.getElementById('in_matricula').focus();
+                return;
+            }
+
+            if (!kmsInicio) {
+                alert("⚠️ Por favor, preencha os Kms de Início!");
+                document.getElementById('in_kms_inicio').focus();
+                return;
+            }
+
+            if (!kmsParagem) {
+                alert("⚠️ Por favor, preencha os Kms de Paragem!");
+                document.getElementById('in_kms_paragem').focus();
+                return;
+            }
+
+            let kmInNum = parseInt(kmsInicio);
+            let kmParNum = parseInt(kmsParagem);
+
+            if (kmParNum < kmInNum) {
+                alert("⚠️ Os Kms de Paragem não podem ser inferiores aos Kms de Início!");
+                document.getElementById('in_kms_paragem').focus();
+                return;
+            }
+
+            if (kmParNum === kmInNum) {
+                if (origem !== destino) {
+                    alert("⚠️ Os Kms de Início e Paragem são iguais, mas a Origem e o Destino são diferentes. Para aceitar os mesmos Kms, a Origem e o Destino têm de ser exatamente iguais!");
+                    document.getElementById('in_destino').focus();
+                    return;
+                }
+            }
+
+            if (!origem) {
+                alert("⚠️ Por favor, preencha a Origem!");
+                document.getElementById('in_origem').focus();
+                return;
+            }
+
+            if (!destino) {
+                alert("⚠️ Por favor, preencha o Destino!");
+                document.getElementById('in_destino').focus();
+                return;
+            }
+
+            if (!peso) {
+                alert("⚠️ Por favor, preencha o Peso!");
+                document.getElementById('in_peso').focus();
+                return;
+            }
+
+            if (!cmr) {
+                alert("⚠️ Por favor, preencha o CMR!");
+                document.getElementById('in_cmr').focus();
+                return;
+            }
+
+            concluirRegistoNormal();
+        }
+
+        function concluirRegistoNormal() {
+            const di = document.getElementById('in_data_inicio');
+            const df = document.getElementById('in_data_fim');
+            
+            const dtInicioStr = formatarDataCurta(di.dataset.dataReal || obterDataHojeISO());
+            const dtFimStr = formatarDataCurta(df.dataset.dataReal || obterDataHojeISO());
+            
+            const kmsIn = document.getElementById('in_kms_inicio').value.trim();
+            const kmsPar = document.getElementById('in_kms_paragem').value.trim();
+            const origemVal = document.getElementById('in_origem').value.trim().toUpperCase();
+            const destinoVal = document.getElementById('in_destino').value.trim().toUpperCase();
+            let obsVal = document.getElementById('in_obs').value.trim();
+
+            let percCalc = "";
+            if(kmsIn && kmsPar) {
+                let diff = parseInt(kmsPar) - parseInt(kmsIn);
+                if(diff > 0) {
+                    percCalc = diff;
+                } else if(diff === 0 && origemVal === destinoVal) {
+                    percCalc = "0";
+                    if (!obsVal.toUpperCase().includes('PARALIS')) {
+                        obsVal = "PARALISADO";
+                    }
+                }
+            }
+
+            const novoItem = {
+                data_inicio: dtInicioStr,
+                data_fim: dtFimStr,
+                kms_inicio: kmsIn,
+                kms_paragem: kmsPar,
+                percurso: percCalc,
+                origem: origemVal,
+                destino: destinoVal,
+                reboque: document.getElementById('in_reboque').value.trim().toUpperCase(),
+                peso: document.getElementById('in_peso').value.trim(),
+                cmr: document.getElementById('in_cmr').value.trim().toUpperCase(),
+                adr: document.getElementById('in_adr').value.trim().toUpperCase(),
+                obs: obsVal
+            };
+
+            dadosPreenchidos.push(novoItem);
+            
+            document.getElementById('in_kms_inicio').value = kmsPar;
+            document.getElementById('in_kms_paragem').value = '';
+            document.getElementById('in_origem').value = destinoVal;
+            document.getElementById('in_destino').value = '';
+            document.getElementById('in_peso').value = '';
+            document.getElementById('in_cmr').value = '';
+            document.getElementById('in_adr').value = '';
+            document.getElementById('in_obs').value = '';
+
+            renderizarTodasAsPaginas();
+            gravarDados();
+            atualizarListasSugestoes();
+            
+            alternarVerFolha(true);
+        }
+
+        function fecharMesAutomatico() {
+            if (dadosPreenchidos.length === 0) {
+                alert("Não existem viagens registadas para fechar o mês.");
+                return;
+            }
+            let res = prompt("Deseja fechar o mês e calcular os totais?\nInsira eventuais despesas extras (ou deixe em branco):", despesasExtras);
+            if (res !== null) {
+                despesasExtras = res.trim();
+                mesFechado = true;
+                renderizarTodasAsPaginas();
+                gravarDados();
+                alert("Mês fechado com sucesso!");
+            }
+        }
+
+        function reabrirMes() {
+            if (confirm("Tem a certeza que deseja reabrir o mês para edição?")) {
+                mesFechado = false;
+                despesasExtras = "";
+                renderizarTodasAsPaginas();
+                gravarDados();
+            }
+        }
+
+        function recuarAcao() {
+            if (mesFechado) return;
+            if (dadosPreenchidos.length > 0) {
+                const removido = dadosPreenchidos.pop();
+                historicoDesfazer.push(removido);
+                renderizarTodasAsPaginas();
+                gravarDados();
+                atualizarListasSugestoes();
+            }
+        }
+
+        function avancarAcao() {
+            if (mesFechado) return;
+            if (historicoDesfazer.length > 0) {
+                const recuperado = historicoDesfazer.pop();
+                dadosPreenchidos.push(recuperado);
+                renderizarTodasAsPaginas();
+                gravarDados();
+                atualizarListasSugestoes();
+            }
+        }
+
+        function sincronizarManual() {
+            gravarDados();
+            alert("Dados sincronizados com sucesso!");
+        }
+
+        function renderizarTodasAsPaginas() {
+            const container = document.getElementById('pageContainer');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const numPaginas = Math.max(1, Math.ceil(dadosPreenchidos.length / LINHAS_POR_PAGINA));
+            const anoVal = document.getElementById('txt_ano_0') ? document.getElementById('txt_ano_0').value : "2026";
+            const inMot = document.getElementById('in_motorista');
+            const inMat = document.getElementById('in_matricula');
+            const assinaturaVal = inMot ? inMot.value : "";
+            const matriculaVal = inMat ? inMat.value : "";
+
+            for (let p = 0; p < numPaginas; p++) {
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page';
+
+                let htmlContent = `
+                    <div class="a4-top-bar">
+                        <div class="a4-buttons-group">
+                            <button type="button" class="btn-a4 btn-a4-nav" onclick="recuarAcao()" title="Recuar / Desfazer">&lt;</button>
+                            <button type="button" class="btn-a4 btn-a4-nav" onclick="avancarAcao()" title="Avançar / Refazer">&gt;</button>
+                            <button type="button" class="btn-a4 btn-a4-apagar" onclick="gerirLimpezaCiclo()">Apagar Tudo</button>
+                            <button type="button" class="btn-a4 btn-a4-sync" onclick="sincronizarManual()">🔄 Sincronizar</button>
+                            ${!mesFechado ? `<button type="button" class="btn-a4 btn-a4-fechar" onclick="fecharMesAutomatico()">🔒 Fechar Mês</button>` : `<button type="button" class="btn-a4 btn-a4-fechar" onclick="reabrirMes()" style="background-color:#fee2e2; color:#991b1b;">🔓 Reabrir Mês</button>`}
+                            <button type="button" class="btn-a4 btn-a4-verde" onclick="imprimirFolha()">Imprimir</button>
+                        </div>
+                        <button class="btn-sair-a4" onclick="alternarVerFolha(false)"><span>[X]</span> SAIR</button>
+                    </div>
+
+                    <div class="sheet-wrapper">
+                        <!-- CABEÇALHO SUPERIOR -->
+                        <div class="header-grid-container">
+                            <div class="h-bloco" style="width: 13.78%;">
+                                <div class="h-linha" style="font-size: 10px;">Mod. 06/20</div>
+                                <div class="h-linha" style="display: flex; gap: 6px; align-items: center; justify-content: center;">
+                                    <span style="font-size: 11.7px; font-weight: bold; color: #000000;">Ano</span>
+                                    <input type="text" id="txt_ano_${p}" class="h-input-celula" style="width: 48px; font-size: 11.7px;" value="${anoVal}" oninput="sincronizarAno(this)">
+                                </div>
+                            </div>
+                            <div class="h-bloco" style="width: 6.92%;">
+                                <div class="h-linha h-linha-superior" style="text-decoration: underline; text-underline-offset: 2px; font-size: 9.9px;">Méd. N.</div>
+                                <div class="h-linha" style="color: #64748b; font-size: 8px;"></div>
+                            </div>
+                            <div class="h-bloco" style="width: 6.92%;">
+                                <div class="h-linha h-linha-superior" style="text-decoration: underline; text-underline-offset: 2px; font-size: 9.9px;">Med. Tec</div>
+                                <div class="h-linha" style="color: #64748b; font-size: 8px;"></div>
+                            </div>
+                            <div class="h-espaco-perc" style="width: 5.65%;"></div>
+                            <div class="h-bloco" style="width: 23.89%;">
+                                <div class="h-linha h-linha-superior trama-cinza" style="font-size: 9.9px;">Assinatura Responsável Do Camião</div>
+                                <div class="h-linha">
+                                    <input type="text" id="txt_assinatura_${p}" class="h-input-celula maiusculas" value="${assinaturaVal}" oninput="sincronizarCabecalhoPagina(this, 'assinatura')">
+                                </div>
+                            </div>
+                            <div class="h-bloco" style="width: 6.84%;">
+                                <div class="h-linha h-linha-superior trama-cinza" style="font-size: 9.9px;">Matricula:</div>
+                                <div class="h-linha">
+                                    <input type="text" id="txt_matricula_${p}" class="h-input-celula maiusculas" maxlength="8" value="${matriculaVal}" oninput="sincronizarCabecalhoPagina(this, 'matricula')">
+                                </div>
+                            </div>
+                            <div class="header-logo-container" style="width: 36.00%;">
+                                <img src="tec_sem _fundo.png" alt="T.E.C., LDA">
+                            </div>
+                        </div>
+
+                        <!-- MASTER-BOX COM A TABELA -->
+                        <div class="master-box">
+                            <table class="main-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 5.50%;">Data início</th>
+                                        <th style="width: 5.50%;">Data fim</th>
+                                        <th style="width: 7.75%;">Kms Início</th>
+                                        <th style="width: 7.75%;">Kms Paragem</th>
+                                        <th class="th-perc" style="width: 5.50%;">Perc.</th>
+                                        <th style="width: 14.75%;">Origem</th>
+                                        <th style="width: 14.75%;">Destino</th>
+                                        <th style="width: 7.00%;">Reboque</th>
+                                        <th style="width: 7.00%;">Peso</th>
+                                        <th style="width: 6.50%;">CMR</th>
+                                        <th style="width: 3.50%;">ADR</th>
+                                        <th style="width: 18.00%;">Observações:</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                const inicioIdx = p * LINHAS_POR_PAGINA;
+                const fimIdx = inicioIdx + LINHAS_POR_PAGINA;
+
+                for (let i = inicioIdx; i < fimIdx; i++) {
+                    const globalIdx = i;
+                    const item = dadosPreenchidos[globalIdx] || {};
+
+                    let isPrimeiraLinhaPaginaSeguinte = (p > 0 && i === inicioIdx);
+                    
+                    let htmlTranca = "";
+                    if (mesFechado && globalIdx === dadosPreenchidos.length) {
+                        htmlTranca = `<div class="linha-tranca-container"><hr><hr></div>`;
+                    }
+
+                    if (mesFechado) {
+                        htmlContent += `
+                            <tr>
+                                <td style="text-align: center;">${isPrimeiraLinhaPaginaSeguinte ? '...(continuação)' : (item.data_inicio || '')} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.data_fim || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.kms_inicio || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.kms_paragem || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.percurso || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.origem || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.destino || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.reboque || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.peso || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.cmr || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.adr || ''} ${htmlTranca}</td>
+                                <td style="text-align: center;">${item.obs || ''} ${htmlTranca}</td>
+                            </tr>
+                        `;
+                    } else {
+                        if (isPrimeiraLinhaPaginaSeguinte) {
+                            htmlContent += `
+                                <tr>
+                                    <td style="text-align: center; font-weight: bold; color: #000000;">...(continuação)</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'data_fim', this)" style="text-align: center;">${item.data_fim || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'kms_inicio', this)" style="text-align: center;">${item.kms_inicio || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'kms_paragem', this)" style="text-align: center;">${item.kms_paragem || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'percurso', this)" style="text-align: center;">${item.percurso || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'origem', this)" style="text-align: center;">${item.origem || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'destino', this)" style="text-align: center;">${item.destino || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'reboque', this)" style="text-align: center;">${item.reboque || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'peso', this)" style="text-align: center;">${item.peso || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'cmr', this)" style="text-align: center;">${item.cmr || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'adr', this)" style="text-align: center;">${item.adr || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'obs', this)" style="text-align: center;">${item.obs || ''}</td>
+                                </tr>
+                            `;
+                        } else {
+                            htmlContent += `
+                                <tr>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'data_inicio', this)" style="text-align: center;">${item.data_inicio || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'data_fim', this)" style="text-align: center;">${item.data_fim || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'kms_inicio', this)" style="text-align: center;">${item.kms_inicio || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'kms_paragem', this)" style="text-align: center;">${item.kms_paragem || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'percurso', this)" style="text-align: center;">${item.percurso || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'origem', this)" style="text-align: center;">${item.origem || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'destino', this)" style="text-align: center;">${item.destino || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'reboque', this)" style="text-align: center;">${item.reboque || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'peso', this)" style="text-align: center;">${item.peso || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'cmr', this)" style="text-align: center;">${item.cmr || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'adr', this)" style="text-align: center;">${item.adr || ''}</td>
+                                    <td contenteditable="true" onblur="atualizarCelulaEditada(${globalIdx}, 'obs', this)" style="text-align: center;">${item.obs || ''}</td>
+                                </tr>
+                            `;
+                        }
+                    }
+                }
+
+                htmlContent += `
+                                </tbody>
+                            </table>
+                `;
+
+                if (p < numPaginas - 1) {
+                    htmlContent += `<div class="aviso-continua">...(Continua)...</div>`;
+                }
+
+                htmlContent += `
+                        </div>
+                    </div>
+                `;
+
+                if (mesFechado && p === numPaginas - 1) {
+                    let totalKms = 0;
+                    let countSabados = 0;
+                    let countDomingos = 0;
+                    let countFeriados = 0;
+                    let countParalizacao = 0;
+
+                    dadosPreenchidos.forEach(item => {
+                        let perc = parseInt(item.percurso) || 0;
+                        totalKms += perc;
+
+                        let obsUpper = (item.obs || '').toUpperCase();
+                        let oriUpper = (item.origem || '').toUpperCase();
+                        let desUpper = (item.destino || '').toUpperCase();
+
+                        let tipoDiaAutomatico = classificarDiaPelaData(item.data_inicio);
+
+                        if (tipoDiaAutomatico === 'sabado' || obsUpper.includes('SABADO') || obsUpper.includes('SÁBADO')) {
+                            countSabados++;
+                        } else if (tipoDiaAutomatico === 'domingo' || obsUpper.includes('DOMINGO')) {
+                            countDomingos++;
+                        } else if (tipoDiaAutomatico === 'feriado' || obsUpper.includes('FERIADO')) {
+                            countFeriados++;
+                        }
+
+                        if (obsUpper.includes('PARALIZ') || obsUpper.includes('PARALIS') ||
+                            oriUpper.includes('PARALIZ') || oriUpper.includes('PARALIS') ||
+                            desUpper.includes('PARALIZ') || desUpper.includes('PARALIS')) {
+                            countParalizacao++;
+                        }
+                    });
+
+                    let resumoItems = [];
+
+                    if (totalKms > 0) {
+                        resumoItems.push(`<div class="resumo-item"><span>Kms Totais do Mês</span>${totalKms} Km</div>`);
+                    }
+                    if (countSabados > 0) {
+                        resumoItems.push(`<div class="resumo-item"><span>Sábados</span>${countSabados} ${countSabados === 1 ? 'dia' : 'dias'}</div>`);
+                    }
+                    if (countDomingos > 0) {
+                        resumoItems.push(`<div class="resumo-item"><span>Domingos</span>${countDomingos} ${countDomingos === 1 ? 'dia' : 'dias'}</div>`);
+                    }
+                    if (countFeriados > 0) {
+                        resumoItems.push(`<div class="resumo-item"><span>Feriados</span>${countFeriados} ${countFeriados === 1 ? 'dia' : 'dias'}</div>`);
+                    }
+                    if (countParalizacao > 0) {
+                        resumoItems.push(`<div class="resumo-item"><span>Paralisações</span>${countParalizacao} ${countParalizacao === 1 ? 'dia' : 'dias'}</div>`);
+                    }
+                    if (despesasExtras && despesasExtras.trim() !== '' && despesasExtras.trim().toLowerCase() !== 'nenhuma') {
+                        resumoItems.push(`<div class="resumo-item"><span>Despesas Extras</span>${despesasExtras}</div>`);
+                    }
+
+                    if (resumoItems.length > 0) {
+                        const nomeMes = obterNomeMesAtual().toUpperCase();
+                        htmlContent += `
+                            <div class="resumo-carimbo">
+                                <div class="resumo-titulo">RESUMO DE ${nomeMes}/26</div>
+                                <div class="resumo-grid">
+                                    ${resumoItems.join('')}
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                pageDiv.innerHTML = htmlContent;
+                container.appendChild(pageDiv);
+            }
+        }
+
+        function atualizarCelulaEditada(index, campo, elemento) {
+            if (mesFechado) return;
+            if (!dadosPreenchidos[index]) {
+                dadosPreenchidos[index] = {};
+            }
+            dadosPreenchidos[index][campo] = elemento.innerText.trim();
+            
+            if(campo === 'kms_inicio' || campo === 'kms_paragem' || campo === 'origem' || campo === 'destino') {
+                let ki = parseInt(dadosPreenchidos[index]['kms_inicio']);
+                let kp = parseInt(dadosPreenchidos[index]['kms_paragem']);
+                let ori = (dadosPreenchidos[index]['origem'] || '').toUpperCase();
+                let des = (dadosPreenchidos[index]['destino'] || '').toUpperCase();
+
+                if(!isNaN(ki) && !isNaN(kp)) {
+                    if(kp > ki) {
+                        dadosPreenchidos[index]['percurso'] = kp - ki;
+                    } else if(kp === ki && ori === des) {
+                        dadosPreenchidos[index]['percurso'] = "0";
+                        let obsAtual = (dadosPreenchidos[index]['obs'] || '').toUpperCase();
+                        if(!obsAtual.includes('PARALIS')) {
+                            dadosPreenchidos[index]['obs'] = "PARALISADO";
+                        }
+                    }
+                }
+            }
+            
+            gravarDados();
+        }
+
+        function gerirLimpezaCiclo() {
+            if (mesFechado) {
+                alert("O mês está fechado. Reabra o mês para limpar os dados.");
+                return;
+            }
+            document.getElementById('modalLimpar').style.display = 'flex';
+        }
+
+        function respostaLimpar(confirmado) {
+            document.getElementById('modalLimpar').style.display = 'none';
+            if (confirmado) {
+                dadosPreenchidos = [];
+                historicoDesfazer = [];
+                mesFechado = false;
+                despesasExtras = "";
+                const inMot = document.getElementById('in_motorista');
+                const inMat = document.getElementById('in_matricula');
+                if (inMot) inMot.value = '';
+                if (inMat) inMat.value = '';
+                document.getElementById('in_kms_inicio').value = '';
+                document.getElementById('in_kms_paragem').value = '';
+                document.getElementById('in_origem').value = '';
+                document.getElementById('in_destino').value = '';
+                document.getElementById('in_reboque').value = '';
+                document.getElementById('in_peso').value = '';
+                document.getElementById('in_cmr').value = '';
+                document.getElementById('in_adr').value = '';
+                document.getElementById('in_obs').value = '';
+                
+                renderizarTodasAsPaginas();
+                gravarDados();
+                atualizarListasSugestoes();
+            }
+        }
+
+        function imprimirFolha() {
+            window.print();
+        }
+
+        function sincronizarAno(el) {
+            let val = el.value;
+            document.querySelectorAll('[id^="txt_ano_"]').forEach(input => {
+                if(input !== el) input.value = val;
+            });
+            gravarDados();
+        }
+
+        function sincronizarCabecalhoPagina(el, tipo) {
+            let val = el.value.toUpperCase();
+            if (tipo === 'assinatura') {
+                const inMot = document.getElementById('in_motorista');
+                if (inMot) inMot.value = val;
+                document.querySelectorAll('[id^="txt_assinatura_"]').forEach(i => i.value = val);
+            } else if (tipo === 'matricula') {
+                const inMat = document.getElementById('in_matricula');
+                if (inMat) inMat.value = val;
+                document.querySelectorAll('[id^="txt_matricula_"]').forEach(i => i.value = val);
+            }
+            gravarDados();
+        }
+
+        function gravarDados() {
+            if (atualizandoRemotamente) return;
+
+            const anoEl = document.getElementById('txt_ano_0');
+            const inMot = document.getElementById('in_motorista');
+            const inMat = document.getElementById('in_matricula');
+
+            const payload = {
+                ano: anoEl ? anoEl.value : "2026",
+                assinatura: inMot ? inMot.value : "",
+                matricula: inMat ? inMat.value : "",
+                mesFechado: mesFechado,
+                despesasExtras: despesasExtras,
+                linhas: dadosPreenchidos
+            };
+
+            dbRef.set(payload).catch(err => {
+                console.error("Erro ao sincronizar com Firebase:", err);
+            });
+        }
+
+        dbRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                atualizandoRemotamente = true;
+                
+                if (data.ano !== undefined) {
+                    document.querySelectorAll('[id^="txt_ano_"]').forEach(i => i.value = data.ano);
+                }
+                if (data.assinatura !== undefined) {
+                    const inMot = document.getElementById('in_motorista');
+                    if (inMot) inMot.value = data.assinatura;
+                    document.querySelectorAll('[id^="txt_assinatura_"]').forEach(i => i.value = data.assinatura);
+                }
+                if (data.matricula !== undefined) {
+                    const inMat = document.getElementById('in_matricula');
+                    if (inMat) inMat.value = data.matricula;
+                    document.querySelectorAll('[id^="txt_matricula_"]').forEach(i => i.value = data.matricula);
+                }
+                if (data.mesFechado !== undefined) mesFechado = data.mesFechado;
+                if (data.despesasExtras !== undefined) despesasExtras = data.despesasExtras;
+
+                if (data.linhas && Array.isArray(data.linhas)) {
+                    dadosPreenchidos = data.linhas;
+                } else {
+                    dadosPreenchidos = [];
+                }
+
+                renderizarTodasAsPaginas();
+                atualizarListasSugestoes();
+                
+                setTimeout(() => {
+                    atualizandoRemotamente = false;
+                }, 200);
+            } else {
+                renderizarTodasAsPaginas();
+            }
+        });
+    </script>
+</body>
+</html>
